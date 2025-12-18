@@ -14,17 +14,12 @@ public class TransactionRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public String insertTransaction(String txnType, Double amount, String currency) {
+    public String insertTransaction(String txnType, double amount, String currency) {
 
         String txnId = UUID.randomUUID().toString();
 
-        String sql = """
-            INSERT INTO transaction (txn_id, txn_type, amount, currency)
-            VALUES (?, ?, ?, ?)
-        """;
-
         jdbcTemplate.update(
-                sql,
+                "INSERT INTO transaction (txn_id, txn_type, amount, currency) VALUES (?, ?, ?, ?)",
                 txnId,
                 txnType,
                 amount,

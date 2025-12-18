@@ -10,3 +10,7 @@ spring:
     username: spring
     password: spring123
     driver-class-name: oracle.jdbc.OracleDriver
+
+txn-mapping:
+  PAYMENT:
+    description: Payment transaction
