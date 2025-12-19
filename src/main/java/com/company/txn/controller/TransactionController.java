@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/transactions")
 public class TransactionController {
@@ -17,10 +19,12 @@ public class TransactionController {
     }
 
     @PostMapping
-    public ResponseEntity<String> process(@RequestBody TransactionRequest request) {
+    public ResponseEntity<?> process(@RequestBody TransactionRequest request) {
         String txnId = service.process(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body("Transaction accepted. txnId=" + txnId);
+                .body(Map.of(
+                        "status", "ACCEPTED",
+                        "txnId", txnId
+                ));
     }
-
 }
