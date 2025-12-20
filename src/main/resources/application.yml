@@ -31,6 +31,10 @@ txn-mapping:
           source: json
           path: $.currency
           required: true
+        source_system:
+          source: json
+          path: $.sourceSystem
+          required: true
 
       transaction_details:
         - column: customer_id

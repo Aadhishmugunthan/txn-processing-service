@@ -46,7 +46,7 @@ public class TransactionProcessingService {
             );
         }
 
-        // 2️⃣ Build transaction table
+        // 2️⃣ Build TRANSACTION columns
         Map<String, Object> txnColumns = new HashMap<>();
 
         for (Map.Entry<String, TxnFieldConfig> entry
@@ -64,11 +64,14 @@ public class TransactionProcessingService {
             txnColumns.put(entry.getKey(), value);
         }
 
-        // 3️⃣ Insert transaction
+        // 3️⃣ Insert TRANSACTION (ONE)
         String txnId = repository.insertTransactionDynamic(txnColumns);
 
-        // 4️⃣ Insert transaction_details
+        // 4️⃣ Insert TRANSACTION_DETAILS (ONE-TO-ONE → SINGLE INSERT)
         if (txnTypeConfig.getTransactionDetails() != null) {
+
+            Map<String, Object> detailColumns = new HashMap<>();
+
             for (TxnDetailConfig d : txnTypeConfig.getTransactionDetails()) {
 
                 Object value = safeResolve(d, request.getPayload());
@@ -79,20 +82,22 @@ public class TransactionProcessingService {
                     );
                 }
 
-                repository.insertTransactionDetail(
-                        txnId,
-                        d.getColumn(),
-                        value
-                );
+                // collect values ONLY
+                detailColumns.put(d.getColumn(), value);
             }
+
+            // 🔴 IMPORTANT: ONLY ONE INSERT → ONE-TO-ONE
+            repository.insertTransactionDetailsOnce(
+                    txnId,
+                    detailColumns
+            );
         }
 
-        // 5️⃣ Insert transaction_address (ONLY if config exists)
+        // 5️⃣ Insert TRANSACTION_ADDRESS (ONE-TO-MANY)
         if (txnTypeConfig.getAddresses() != null) {
 
             var addrCfg = txnTypeConfig.getAddresses();
 
-            // Validate expectedSize
             if (addrCfg.getExpectedSize() != addrCfg.getDefinitions().size()) {
                 throw new IllegalArgumentException(
                         "Expected " + addrCfg.getExpectedSize() +
@@ -109,12 +114,12 @@ public class TransactionProcessingService {
 
                 String line1 = String.valueOf(addrJson.get("line1"));
                 String city  = String.valueOf(addrJson.get("city"));
-                String country = "INDIA"; // from config (constant)
+                String country = "INDIA";
 
                 repository.insertTransactionAddress(
                         addressId,
                         txnId,
-                        addrDef.getAddressType(), // NEVER from payload
+                        addrDef.getAddressType(),
                         line1,
                         city,
                         country

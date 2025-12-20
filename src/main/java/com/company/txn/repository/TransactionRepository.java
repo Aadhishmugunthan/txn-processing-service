@@ -17,7 +17,11 @@ public class TransactionRepository {
 
     public String insertTransactionDynamic(Map<String, Object> columns) {
 
-        String sql = "INSERT INTO transaction (txn_id, txn_type, amount, currency) VALUES (?, ?, ?, ?)";
+        String sql = """
+        INSERT INTO TRANSACTION
+        (TXN_ID, TXN_TYPE, AMOUNT, CURRENCY, SOURCE_SYSTEM)
+        VALUES (?, ?, ?, ?, ?)
+        """;
 
         String txnId = (String) columns.get("txn_id");
 
@@ -26,44 +30,48 @@ public class TransactionRepository {
                 columns.get("txn_id"),
                 columns.get("txn_type"),
                 columns.get("amount"),
-                columns.get("currency")
+                columns.get("currency"),
+                columns.get("source_system") // NEW
         );
 
         return txnId;
     }
 
-    public void insertTransactionDetail(
+    public void insertTransactionDetailsOnce(
             String txnId,
-            String key,
-            Object value
+            Map<String, Object> columns
     ) {
         jdbcTemplate.update(
-                "INSERT INTO transaction_details (txn_id, key, value) VALUES (?, ?, ?)",
+                """
+                INSERT INTO TRANSACTION_DETAILS (TXN_ID, CUSTOMER_ID, CHANNEL)
+                VALUES (?, ?, ?)
+                """,
                 txnId,
-                key,
-                value != null ? value.toString() : null
+                columns.get("CUSTOMER_ID"),
+                columns.get("CHANNEL")
         );
     }
+
 
     public void insertTransactionAddress(
             String addressId,
             String txnId,
             String addressType,
-            String fieldKey,
-            String fieldValue,
+            String line1,
+            String city,
             String country
     ) {
         jdbcTemplate.update(
                 """
                 INSERT INTO transaction_address
-                (address_id, txn_id, address_type, field_key, field_value, country)
+                (address_id, txn_id, address_type, line1, city, country)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 addressId,
                 txnId,
                 addressType,
-                fieldKey,
-                fieldValue,
+                line1,
+                city,
                 country
         );
     }
