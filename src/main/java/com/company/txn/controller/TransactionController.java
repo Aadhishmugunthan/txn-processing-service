@@ -23,8 +23,9 @@ public class TransactionController {
         String txnId = service.process(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of(
-                        "status", "ACCEPTED",
+                        "status", "SUCCESS",
                         "txnId", txnId
                 ));
     }
+
 }

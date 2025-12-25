@@ -15,7 +15,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleValidation(IllegalArgumentException ex) {
         return ResponseEntity.badRequest().body(Map.of(
                 "status", "FAILED",
-                "reason", ex.getMessage()
+                "message", ex.getMessage()
         ));
     }
 
@@ -23,15 +23,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleJsonPath(PathNotFoundException ex) {
         return ResponseEntity.badRequest().body(Map.of(
                 "status", "FAILED",
-                "reason", "Missing required JSON field"
+                "message", "Missing required JSON field"
         ));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleAny(Exception ex) {
+        ex.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "status", "ERROR",
-                "reason", "Internal server error"
+                "status", "FAILED",
+                "message", "Internal server error"
         ));
     }
 }

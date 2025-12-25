@@ -9,15 +9,26 @@ spring:
     import: configserver:http://localhost:8888
 
   datasource:
-    url: jdbc:h2:mem:txn-db
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    driver-class-name: oracle.jdbc.OracleDriver
+    url: jdbc:oracle:thin:@localhost:1521/FREEPDB1
+    username: spring
+    password: spring123
 
-  h2:
-    console:
-      enabled: true
+    jpa:
+      hibernate:
+        ddl-auto: update   # dev only
+      show-sql: true
+      properties:
+        hibernate:
+          format_sql: true
+          dialect: org.hibernate.dialect.OracleDialect
 
-  sql:
-    init:
-      mode: always
+
+
+logging:
+  level:
+    root: INFO
+    org.springframework.jdbc.core: DEBUG
+    com.company.txn: DEBUG
+
+

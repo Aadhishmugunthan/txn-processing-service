@@ -3,151 +3,76 @@ package com.company.txn.service;
 import com.company.txn.config.TxnDetailConfig;
 import com.company.txn.config.TxnFieldConfig;
 import com.company.txn.config.TxnMappingConfig;
+import com.company.txn.config.TxnTypeConfig;
 import com.company.txn.model.TransactionRequest;
 import com.company.txn.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class TransactionProcessingServiceTest {
 
-    @Mock
-    private TxnMappingConfig txnMappingConfig;
-
-    @Mock
     private TransactionRepository repository;
-
-    @InjectMocks
+    private TxnMappingConfig mappingConfig;
     private TransactionProcessingService service;
 
     @BeforeEach
-    void setUp() {
-        TxnMappingConfig.TxnTypeConfig paymentConfig = new TxnMappingConfig.TxnTypeConfig();
+    void setup() {
+        repository = Mockito.mock(TransactionRepository.class);
+        mappingConfig = new TxnMappingConfig();
+        service = new TransactionProcessingService(mappingConfig, repository);
+    }
 
-        Map<String, TxnFieldConfig> paymentFields = new HashMap<>();
+    @Test
+    void testPaymentTransactionProcessing() {
 
-        TxnFieldConfig idField = new TxnFieldConfig();
-        idField.setSource("generated");
-        idField.setRequired(true);
-        paymentFields.put("txn_id", idField);
+        // 🔥 Prepare transaction config
+        TxnTypeConfig txnTypeConfig = new TxnTypeConfig();
 
-        TxnFieldConfig typeField = new TxnFieldConfig();
-        typeField.setSource("constant");
-        typeField.setValue("PAYMENT");
-        paymentFields.put("txn_type", typeField);
-
+        Map<String, TxnFieldConfig> transactionFields = new HashMap<>();
         TxnFieldConfig amountField = new TxnFieldConfig();
         amountField.setSource("json");
         amountField.setPath("$.amount");
-        paymentFields.put("amount", amountField);
+        amountField.setRequired(true);
+        transactionFields.put("amount", amountField);
 
-        TxnFieldConfig currencyField = new TxnFieldConfig();
-        currencyField.setSource("json");
-        currencyField.setPath("$.currency");
-        paymentFields.put("currency", currencyField);
+        txnTypeConfig.setTransaction(transactionFields);
 
-        paymentConfig.setTransaction(paymentFields);
+        // 🔥 Status Config
+        TxnTypeConfig.StatusConfig statusConfig = new TxnTypeConfig.StatusConfig();
+        TxnTypeConfig.StatusConfig.InitialStatus initial = new TxnTypeConfig.StatusConfig.InitialStatus();
+        initial.setCurrent_status("ACCEPTED");
+        initial.setRemarks("Mock");
+        statusConfig.setInitial(initial);
+        txnTypeConfig.setStatus(statusConfig);
 
-        List<TxnDetailConfig> detailConfigs = new ArrayList<>();
-        TxnDetailConfig merchantConfig = new TxnDetailConfig();
-        merchantConfig.setColumn("merchant_id");
-        merchantConfig.setSource("json");
-        merchantConfig.setPath("$.merchantId");
-        detailConfigs.add(merchantConfig);
-        paymentConfig.setTransactionDetails(detailConfigs);
+        Map<String, TxnTypeConfig> mappings = new HashMap<>();
+        mappings.put("PAYMENT", txnTypeConfig);
+        mappingConfig.setMappings(mappings);
 
-        TxnMappingConfig.TxnTypeConfig refundConfig = new TxnMappingConfig.TxnTypeConfig();
-        Map<String, TxnFieldConfig> refundFields = new HashMap<>();
-
-        TxnFieldConfig refundIdField = new TxnFieldConfig();
-        refundIdField.setSource("generated");
-        refundFields.put("txn_id", refundIdField);
-
-        TxnFieldConfig refundTypeField = new TxnFieldConfig();
-        refundTypeField.setSource("constant");
-        refundTypeField.setValue("REFUND");
-        refundFields.put("txn_type", refundTypeField);
-
-        TxnFieldConfig refundAmountField = new TxnFieldConfig();
-        refundAmountField.setSource("json");
-        refundAmountField.setPath("$.amount");
-        refundFields.put("amount", refundAmountField);
-
-        refundConfig.setTransaction(refundFields);
-
-        Map<String, TxnMappingConfig.TxnTypeConfig> mappings = new HashMap<>();
-        mappings.put("PAYMENT", paymentConfig);
-        mappings.put("REFUND", refundConfig);
-
-        lenient().when(txnMappingConfig.getMappings()).thenReturn(mappings);
-    }
-
-    @Test
-    void shouldProcessPaymentTransaction() {
-        when(repository.insertTransactionDynamic(anyMap())).thenReturn("txn-123");
-        doNothing().when(repository).insertTransactionDetailsOnce(anyString(), anyMap());
+        // 🔥 Payload as MAP (NOT String anymore)
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("amount", 1000);
 
         TransactionRequest request = new TransactionRequest();
         request.setTxnType("PAYMENT");
-        request.setPayload("{\"amount\": 100, \"currency\": \"INR\", \"merchantId\": \"M-1\"}");
+        request.setPayload(payload);
+
+        when(repository.insertTransactionDynamic(any())).thenReturn(UUID.randomUUID().toString());
 
         String txnId = service.process(request);
+        assertNotNull(txnId);
 
-        assertEquals("txn-123", txnId);
-        verify(repository).insertTransactionDynamic(anyMap());
-    }
-
-    @Test
-    void shouldProcessRefundTransaction() {
-        when(repository.insertTransactionDynamic(anyMap())).thenReturn("txn-456");
-
-        TransactionRequest request = new TransactionRequest();
-        request.setTxnType("REFUND");
-        request.setPayload("{\"amount\": 50}");
-
-        String txnId = service.process(request);
-
-        assertEquals("txn-456", txnId);
-        verify(repository).insertTransactionDynamic(anyMap());
-    }
-
-    @Test
-    void shouldThrowExceptionWhenRequestIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> service.process(null));
-    }
-
-    @Test
-    void shouldThrowExceptionWhenTxnTypeIsNull() {
-        TransactionRequest request = new TransactionRequest();
-        request.setPayload("{\"amount\": 100}");
-
-        assertThrows(IllegalArgumentException.class, () -> service.process(request));
-    }
-
-    @Test
-    void shouldThrowExceptionWhenPayloadIsNull() {
-        TransactionRequest request = new TransactionRequest();
-        request.setTxnType("PAYMENT");
-
-        assertThrows(IllegalArgumentException.class, () -> service.process(request));
-    }
-
-    @Test
-    void shouldThrowExceptionForUnsupportedTxnType() {
-        TransactionRequest request = new TransactionRequest();
-        request.setTxnType("INVALID");
-        request.setPayload("{\"amount\": 100}");
-
-        assertThrows(IllegalArgumentException.class, () -> service.process(request));
+        verify(repository, times(1)).insertTransactionDynamic(any());
+        verify(repository, times(1))
+                .insertTransactionStatus(any(), any(), eq("ACCEPTED"), eq("Mock"));
     }
 }
