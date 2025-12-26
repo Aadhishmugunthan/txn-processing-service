@@ -33,8 +33,14 @@ public class TransactionProcessingService {
     @Transactional
     public String process(TransactionRequest request) {
 
+        // Validate request
         if (request == null || request.getTxnType() == null || request.getPayload() == null) {
             throw new IllegalArgumentException("txnType and payload are required");
+        }
+
+        // txnId is now required in the request
+        if (request.getTxnId() == null || request.getTxnId().trim().isEmpty()) {
+            throw new IllegalArgumentException("txnId is required");
         }
 
         Map<String, Object> payload;
@@ -51,8 +57,11 @@ public class TransactionProcessingService {
             throw new IllegalArgumentException("Unsupported txnType: " + request.getTxnType());
         }
 
-        // Always generate transaction ID here
-        String txnId = UUID.randomUUID().toString();
+        // Get txnId from request (no UUID generation)
+        String txnId = request.getTxnId();
+
+        // Check if transaction exists in database
+        boolean exists = repository.transactionExists(txnId);
 
         Map<String, Object> txnColumns = new HashMap<>();
         txnColumns.put("TXN_ID", txnId);
@@ -72,9 +81,14 @@ public class TransactionProcessingService {
             txnColumns.put(entry.getKey(), value);
         }
 
-        repository.insertTransactionDynamic(txnColumns);
+        // INSERT or UPDATE based on existence
+        if (exists) {
+            repository.updateTransactionDynamic(txnId, txnColumns);
+        } else {
+            repository.insertTransactionDynamic(txnColumns);
+        }
 
-        // Insert TRANSACTION_DETAILS
+        // INSERT or UPDATE TRANSACTION_DETAILS
         if (txnTypeConfig.getTransactionDetails() != null) {
 
             Map<String, Object> detailColumns = new HashMap<>();
@@ -89,16 +103,25 @@ public class TransactionProcessingService {
                 detailColumns.put(d.getColumn(), value);
             }
 
-            repository.insertTransactionDetailsOnce(txnId, detailColumns);
+            if (exists) {
+                repository.updateTransactionDetailsOnce(txnId, detailColumns);
+            } else {
+                repository.insertTransactionDetailsOnce(txnId, detailColumns);
+            }
         }
 
-        // Insert Addresses
+        // DELETE and RE-INSERT Addresses (simpler approach)
         if (txnTypeConfig.getAddresses() != null) {
+
+            if (exists) {
+                repository.deleteTransactionAddresses(txnId);
+            }
 
             var addrCfg = txnTypeConfig.getAddresses();
 
             for (var addrDef : addrCfg.getDefinitions()) {
 
+                // Generate addressId only (not txnId)
                 String addressId = UUID.randomUUID().toString();
                 Map<String, Object> addrJson =
                         JsonPath.read(payload, addrDef.getJsonPath());
@@ -114,12 +137,17 @@ public class TransactionProcessingService {
             }
         }
 
-        // Insert Transaction Status
+        // DELETE and RE-INSERT Transaction Status (simpler approach)
         if (txnTypeConfig.getStatus() != null &&
                 txnTypeConfig.getStatus().getInitial() != null) {
 
+            if (exists) {
+                repository.deleteTransactionStatus(txnId);
+            }
+
             var statusCfg = txnTypeConfig.getStatus().getInitial();
 
+            // Generate statusId only (not txnId)
             repository.insertTransactionStatus(
                     UUID.randomUUID().toString(),
                     txnId,
@@ -128,7 +156,7 @@ public class TransactionProcessingService {
             );
         }
 
-        return txnId;
+        return txnId;  // Return the txnId from request
     }
 
     private Object resolve(TxnFieldConfig cfg, Map<String, Object> payload) {

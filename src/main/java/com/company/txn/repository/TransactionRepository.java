@@ -16,8 +16,13 @@ public class TransactionRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    public boolean transactionExists(String txnId) {
+        String sql = "SELECT COUNT(*) FROM TRANSACTION WHERE TXN_ID = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, txnId);
+        return count != null && count > 0;
+    }
+
     public void insertTransactionDynamic(Map<String, Object> columns) {
-        // Build dynamic SQL based on the columns map
         List<String> columnNames = new ArrayList<>();
         List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
@@ -37,6 +42,27 @@ public class TransactionRepository {
         jdbcTemplate.update(sql, values.toArray());
     }
 
+    public void updateTransactionDynamic(String txnId, Map<String, Object> columns) {
+        List<String> setClauses = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+
+        for (Map.Entry<String, Object> entry : columns.entrySet()) {
+            if (!entry.getKey().equals("TXN_ID")) {
+                setClauses.add(entry.getKey() + " = ?");
+                values.add(entry.getValue());
+            }
+        }
+
+        values.add(txnId);
+
+        String sql = String.format(
+                "UPDATE TRANSACTION SET %s WHERE TXN_ID = ?",
+                String.join(", ", setClauses)
+        );
+
+        jdbcTemplate.update(sql, values.toArray());
+    }
+
     public void insertTransactionDetailsOnce(String txnId, Map<String, Object> detailColumns) {
         if (detailColumns == null || detailColumns.isEmpty()) {
             return;
@@ -46,12 +72,10 @@ public class TransactionRepository {
         List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
 
-        // Add TXN_ID first
         columnNames.add("TXN_ID");
         placeholders.add("?");
         values.add(txnId);
 
-        // Add other columns
         for (Map.Entry<String, Object> entry : detailColumns.entrySet()) {
             columnNames.add(entry.getKey());
             placeholders.add("?");
@@ -65,6 +89,39 @@ public class TransactionRepository {
         );
 
         jdbcTemplate.update(sql, values.toArray());
+    }
+
+    public void updateTransactionDetailsOnce(String txnId, Map<String, Object> detailColumns) {
+        if (detailColumns == null || detailColumns.isEmpty()) {
+            return;
+        }
+
+        List<String> setClauses = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+
+        for (Map.Entry<String, Object> entry : detailColumns.entrySet()) {
+            setClauses.add(entry.getKey() + " = ?");
+            values.add(entry.getValue());
+        }
+
+        values.add(txnId);
+
+        String sql = String.format(
+                "UPDATE TRANSACTION_DETAILS SET %s WHERE TXN_ID = ?",
+                String.join(", ", setClauses)
+        );
+
+        jdbcTemplate.update(sql, values.toArray());
+    }
+
+    public void deleteTransactionAddresses(String txnId) {
+        String sql = "DELETE FROM TRANSACTION_ADDRESS WHERE TXN_ID = ?";
+        jdbcTemplate.update(sql, txnId);
+    }
+
+    public void deleteTransactionStatus(String txnId) {
+        String sql = "DELETE FROM TRANSACTION_STATUS WHERE TXN_ID = ?";
+        jdbcTemplate.update(sql, txnId);
     }
 
     public void insertTransactionAddress(
