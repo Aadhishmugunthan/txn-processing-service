@@ -1,0 +1,17 @@
+package rules
+
+import com.company.txn.drools.TransactionDecision;
+
+rule "Allow transaction"
+when
+    $d : TransactionDecision( operation == "A" )
+then
+    $d.setProcessTxn(true);
+end
+
+rule "Ignore transaction"
+when
+    $d : TransactionDecision( operation == "I" )
+then
+    $d.setProcessTxn(false);
+end

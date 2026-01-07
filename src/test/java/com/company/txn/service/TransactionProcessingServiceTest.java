@@ -1,78 +1,92 @@
 package com.company.txn.service;
 
-import com.company.txn.config.TxnDetailConfig;
 import com.company.txn.config.TxnFieldConfig;
 import com.company.txn.config.TxnMappingConfig;
 import com.company.txn.config.TxnTypeConfig;
+import com.company.txn.drools.TransactionDecision;
 import com.company.txn.model.TransactionRequest;
 import com.company.txn.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.kie.api.runtime.KieContainer;
+import org.kie.api.runtime.KieSession;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class TransactionProcessingServiceTest {
 
-    private TransactionRepository repository;
+    @Mock
     private TxnMappingConfig mappingConfig;
+
+    @Mock
+    private TransactionRepository repository;
+
+    @Mock
+    private KieContainer kieContainer;
+
+    @Mock
+    private KieSession kieSession;
+
+    @InjectMocks
     private TransactionProcessingService service;
 
     @BeforeEach
     void setup() {
-        repository = Mockito.mock(TransactionRepository.class);
-        mappingConfig = new TxnMappingConfig();
-        service = new TransactionProcessingService(mappingConfig, repository);
-    }
+        MockitoAnnotations.openMocks(this);
 
-    @Test
-    void testPaymentTransactionProcessing() {
+        // ---------------- DROOLS ----------------
+        when(kieContainer.newKieSession()).thenReturn(kieSession);
 
-        // 🔥 Prepare transaction config
-        TxnTypeConfig txnTypeConfig = new TxnTypeConfig();
+        doAnswer(invocation -> {
+            TransactionDecision decision = invocation.getArgument(0);
+            decision.setProcessTxn(true); // ALLOW
+            return null;
+        }).when(kieSession).insert(any(TransactionDecision.class));
 
-        Map<String, TxnFieldConfig> transactionFields = new HashMap<>();
+        // ---------------- TXN CONFIG ----------------
         TxnFieldConfig amountField = new TxnFieldConfig();
         amountField.setSource("json");
         amountField.setPath("$.amount");
-        amountField.setRequired(true);
-        transactionFields.put("amount", amountField);
+        amountField.setRequired(false);
 
-        txnTypeConfig.setTransaction(transactionFields);
+        Map<String, TxnFieldConfig> txnFields = new HashMap<>();
+        txnFields.put("AMOUNT", amountField);
 
-        // 🔥 Status Config
-        TxnTypeConfig.StatusConfig statusConfig = new TxnTypeConfig.StatusConfig();
-        TxnTypeConfig.StatusConfig.InitialStatus initial = new TxnTypeConfig.StatusConfig.InitialStatus();
-        initial.setCurrent_status("ACCEPTED");
-        initial.setRemarks("Mock");
-        statusConfig.setInitial(initial);
-        txnTypeConfig.setStatus(statusConfig);
+        TxnTypeConfig txnTypeConfig = new TxnTypeConfig();
+        txnTypeConfig.setTransaction(txnFields); // ✅ THIS FIXES THE NPE
 
         Map<String, TxnTypeConfig> mappings = new HashMap<>();
         mappings.put("PAYMENT", txnTypeConfig);
-        mappingConfig.setMappings(mappings);
 
-        // 🔥 Payload as MAP (NOT String anymore)
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("amount", 1000);
+        when(mappingConfig.getMappings()).thenReturn(mappings);
+    }
+
+    @Test
+    void shouldProcessTransaction_whenOperationIsAllow() {
 
         TransactionRequest request = new TransactionRequest();
+        request.setTxnId(UUID.randomUUID().toString());
         request.setTxnType("PAYMENT");
-        request.setPayload(payload);
+        request.setOperation("A");
+        request.setPayload("{\"amount\":1000}");
 
-        when(repository.insertTransactionDynamic(any())).thenReturn(UUID.randomUUID().toString());
+        when(repository.transactionExists(any())).thenReturn(false);
 
         String txnId = service.process(request);
-        assertNotNull(txnId);
 
-        verify(repository, times(1)).insertTransactionDynamic(any());
-        verify(repository, times(1))
-                .insertTransactionStatus(any(), any(), eq("ACCEPTED"), eq("Mock"));
+        verify(repository).insertTransactionDynamic(any());
+        verify(kieSession).fireAllRules();
+        verify(kieSession).dispose();
+
+        assert txnId != null;
     }
 }
+

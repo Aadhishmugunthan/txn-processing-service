@@ -4,10 +4,13 @@ import com.company.txn.config.TxnDetailConfig;
 import com.company.txn.config.TxnFieldConfig;
 import com.company.txn.config.TxnMappingConfig;
 import com.company.txn.config.TxnTypeConfig;
+import com.company.txn.drools.TransactionDecision;
 import com.company.txn.model.TransactionRequest;
 import com.company.txn.repository.TransactionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
+import org.kie.api.runtime.KieContainer;
+import org.kie.api.runtime.KieSession;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,29 +23,46 @@ public class TransactionProcessingService {
 
     private final TxnMappingConfig txnMappingConfig;
     private final TransactionRepository repository;
+    private final KieContainer kieContainer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TransactionProcessingService(
             TxnMappingConfig txnMappingConfig,
-            TransactionRepository repository
+            TransactionRepository repository,
+            KieContainer kieContainer
     ) {
         this.txnMappingConfig = txnMappingConfig;
         this.repository = repository;
+        this.kieContainer = kieContainer;
     }
 
     @Transactional
     public String process(TransactionRequest request) {
 
-        // Validate request
+        // ================= VALIDATION =================
         if (request == null || request.getTxnType() == null || request.getPayload() == null) {
             throw new IllegalArgumentException("txnType and payload are required");
         }
 
-        // txnId is now required in the request
         if (request.getTxnId() == null || request.getTxnId().trim().isEmpty()) {
             throw new IllegalArgumentException("txnId is required");
         }
 
+        // ================= DROOLS DECISION =================
+        TransactionDecision decision =
+                new TransactionDecision(request.getOperation());
+
+        KieSession kieSession = kieContainer.newKieSession();
+        kieSession.insert(decision);
+        kieSession.fireAllRules();
+        kieSession.dispose();
+
+        if (!decision.isProcessTxn()) {
+            // Rule decided to ignore transaction
+            return request.getTxnId(); // or return "IGNORED" if you prefer
+        }
+
+        // ================= PAYLOAD PARSE =================
         Map<String, Object> payload;
         try {
             payload = objectMapper.readValue(request.getPayload(), Map.class);
@@ -57,12 +77,11 @@ public class TransactionProcessingService {
             throw new IllegalArgumentException("Unsupported txnType: " + request.getTxnType());
         }
 
-        // Get txnId from request (no UUID generation)
         String txnId = request.getTxnId();
 
-        // Check if transaction exists in database
         boolean exists = repository.transactionExists(txnId);
 
+        // ================= TRANSACTION TABLE =================
         Map<String, Object> txnColumns = new HashMap<>();
         txnColumns.put("TXN_ID", txnId);
 
@@ -81,14 +100,13 @@ public class TransactionProcessingService {
             txnColumns.put(entry.getKey(), value);
         }
 
-        // INSERT or UPDATE based on existence
         if (exists) {
             repository.updateTransactionDynamic(txnId, txnColumns);
         } else {
             repository.insertTransactionDynamic(txnColumns);
         }
 
-        // INSERT or UPDATE TRANSACTION_DETAILS
+        // ================= TRANSACTION_DETAILS =================
         if (txnTypeConfig.getTransactionDetails() != null) {
 
             Map<String, Object> detailColumns = new HashMap<>();
@@ -97,7 +115,8 @@ public class TransactionProcessingService {
                 Object value = safeResolve(d, payload);
 
                 if (d.isRequired() && value == null) {
-                    throw new IllegalArgumentException("Missing required transaction_detail: " + d.getColumn());
+                    throw new IllegalArgumentException(
+                            "Missing required transaction_detail: " + d.getColumn());
                 }
 
                 detailColumns.put(d.getColumn(), value);
@@ -110,7 +129,7 @@ public class TransactionProcessingService {
             }
         }
 
-        // DELETE and RE-INSERT Addresses (simpler approach)
+        // ================= TRANSACTION_ADDRESS =================
         if (txnTypeConfig.getAddresses() != null) {
 
             if (exists) {
@@ -121,7 +140,6 @@ public class TransactionProcessingService {
 
             for (var addrDef : addrCfg.getDefinitions()) {
 
-                // Generate addressId only (not txnId)
                 String addressId = UUID.randomUUID().toString();
                 Map<String, Object> addrJson =
                         JsonPath.read(payload, addrDef.getJsonPath());
@@ -137,7 +155,7 @@ public class TransactionProcessingService {
             }
         }
 
-        // DELETE and RE-INSERT Transaction Status (simpler approach)
+        // ================= TRANSACTION_STATUS =================
         if (txnTypeConfig.getStatus() != null &&
                 txnTypeConfig.getStatus().getInitial() != null) {
 
@@ -147,7 +165,6 @@ public class TransactionProcessingService {
 
             var statusCfg = txnTypeConfig.getStatus().getInitial();
 
-            // Generate statusId only (not txnId)
             repository.insertTransactionStatus(
                     UUID.randomUUID().toString(),
                     txnId,
@@ -156,8 +173,10 @@ public class TransactionProcessingService {
             );
         }
 
-        return txnId;  // Return the txnId from request
+        return txnId;
     }
+
+    // ================= HELPER METHODS =================
 
     private Object resolve(TxnFieldConfig cfg, Map<String, Object> payload) {
         return switch (cfg.getSource()) {

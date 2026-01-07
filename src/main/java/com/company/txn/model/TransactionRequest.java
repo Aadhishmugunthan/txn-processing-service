@@ -4,6 +4,7 @@ public class TransactionRequest {
 
     private String txnId;      // txnId is now sent from request
     private String txnType;
+    private String operation;
     private String payload;
 
     public TransactionRequest() {
@@ -23,6 +24,14 @@ public class TransactionRequest {
 
     public void setTxnType(String txnType) {
         this.txnType = txnType;
+    }
+
+    public String getOperation(){
+        return operation;
+    }
+
+    public void setOperation(String operation) {
+        this.operation = operation;
     }
 
     public String getPayload() {

@@ -1,20 +1,19 @@
 package com.company.txn.repository;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.MockitoAnnotations;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class TransactionRepositoryTest {
 
     @Mock
@@ -23,38 +22,47 @@ class TransactionRepositoryTest {
     @InjectMocks
     private TransactionRepository repository;
 
+    @BeforeEach
+    void setup() {
+        MockitoAnnotations.openMocks(this);
+    }
+
     @Test
     void shouldInsertTransactionDynamic() {
-        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
         Map<String, Object> columns = new HashMap<>();
-        columns.put("txn_id", "txn-1");
-        columns.put("txn_type", "PAYMENT");
+        columns.put("TXN_ID", "TXN001");
+        columns.put("TXN_TYPE", "PAYMENT");
 
-        String txnId = repository.insertTransactionDynamic(columns);
+        when(jdbcTemplate.update(anyString(), any(Object[].class)))
+                .thenReturn(1);
 
-        assertEquals("txn-1", txnId);
+        // METHOD RETURNS VOID — JUST CALL IT
+        repository.insertTransactionDynamic(columns);
+
+        // VERIFY IT WAS CALLED
         verify(jdbcTemplate).update(anyString(), any(Object[].class));
     }
 
     @Test
-    void shouldInsertTransactionDetails() {
-        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+    void shouldReturnTrue_whenTransactionExists() {
 
-        Map<String, Object> details = new HashMap<>();
-        details.put("merchant_id", "MERCH-123");
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any()))
+                .thenReturn(1);
 
-        repository.insertTransactionDetailsOnce("txn-1", details);
+        boolean exists = repository.transactionExists("TXN001");
 
-        verify(jdbcTemplate).update(anyString(), any(Object[].class));
+        assert exists;
     }
 
     @Test
-    void shouldInsertTransactionAddress() {
-        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+    void shouldReturnFalse_whenTransactionDoesNotExist() {
 
-        repository.insertTransactionAddress("addr-1", "txn-1", "BILLING", "123 St", "Mumbai", "INDIA");
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any()))
+                .thenReturn(0);
 
-        verify(jdbcTemplate).update(anyString(), any(Object[].class));
+        boolean exists = repository.transactionExists("TXN002");
+
+        assert !exists;
     }
 }

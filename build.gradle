@@ -35,6 +35,12 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     implementation 'org.springframework.cloud:spring-cloud-starter-config'
 
+    implementation 'org.drools:drools-core:8.44.0.Final'
+    implementation 'org.drools:drools-compiler:8.44.0.Final'
+    implementation 'org.drools:drools-xml-support:8.44.0.Final'
+    implementation 'org.kie:kie-api:8.44.0.Final'
+    implementation "org.drools:drools-mvel:8.44.0.Final"
+
 }
 ext {
     set('springCloudVersion', "2023.0.3")
