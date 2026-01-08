@@ -1,38 +1,46 @@
 package com.company.txn.exception;
 
-import com.jayway.jsonpath.PathNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<?> handleValidation(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(Map.of(
-                "status", "FAILED",
-                "message", ex.getMessage()
-        ));
+    @ExceptionHandler(DroolsExecutionException.class)
+    public ResponseEntity<Map<String, Object>> handleDroolsException(
+            DroolsExecutionException ex) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "FAILED");
+        response.put("message", "Rule engine failure");
+
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    @ExceptionHandler(PathNotFoundException.class)
-    public ResponseEntity<?> handleJsonPath(PathNotFoundException ex) {
-        return ResponseEntity.badRequest().body(Map.of(
-                "status", "FAILED",
-                "message", "Missing required JSON field"
-        ));
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(
+            IllegalArgumentException ex) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "FAILED");
+        response.put("message", ex.getMessage());
+
+        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleAny(Exception ex) {
-        ex.printStackTrace();
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "status", "FAILED",
-                "message", "Internal server error"
-        ));
+    public ResponseEntity<Map<String, Object>> handleGenericException(
+            Exception ex) {
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("status", "FAILED");
+        response.put("message", "Internal server error");
+
+        return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
